@@ -109,14 +109,14 @@ int main(void)
 //	FillRect(90, 60, 20, 20, 0x001F);
 
 
-	//LCD_Bitmap(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned char bitmap[]);
-	//LCD_Bitmap(100, 100, 49, 36, dkong);
-	//LCD_Bitmap(100, 100, 24, 30, sonic);
+//	LCD_Bitmap(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned char bitmap[]);
+//	LCD_Bitmap(100, 100, 49, 36, dkong);
+//	LCD_Bitmap(100, 100, 24, 30, sonic);
 
-	//LCD_Bitmap(0, 0, 320, 240, fondoPinguin);
-	//LCD_BitmapTransparent(100, 100, 49, 36, dkong, 0x4b7e);
-	//LCD_BitmapTransparent(50, 60,32,32,megaman,0x03ba);
-	//LCD_Bitmap(132, 100, 32, 32, megaman);
+	LCD_Bitmap(0, 0, 320, 240, fondoPinguin);
+//	LCD_BitmapTransparent(100, 100, 49, 36, dkong, 0x4b7e);
+//	LCD_BitmapTransparent(50, 60,32,32,megaman,0x03ba);
+//	LCD_Bitmap(132, 100, 32, 32, megaman);
 
 
 
