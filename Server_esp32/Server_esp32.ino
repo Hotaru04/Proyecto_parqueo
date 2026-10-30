@@ -17,7 +17,7 @@ WebServer server(80);
 
 String paginaHTML() {
   String html = "<!DOCTYPE html><html><head><title>LED</title></head><body>";
-  html += "<h1>Control LED</h1>";
+  html += "<h1>Parqueomatic</h1>";
 
   if (ledState) {
     html += "<p>Estado: ENCENDIDO</p>";
