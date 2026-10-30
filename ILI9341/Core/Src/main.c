@@ -23,6 +23,11 @@
 /* USER CODE BEGIN Includes */
 #include "ili9341.h"
 #include "Bitmaps.h"
+
+//Libreria de parqueo
+
+#include "parqueo.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,6 +37,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+#define PARQUEO_MODO_DEMO 1
 
 /* USER CODE END PD */
 
@@ -98,6 +105,10 @@ int main(void)
 	LCD_Init();
 
 	LCD_Clear(0x00);
+
+	Parqueo_Init(PARQUEO_MODO_DEMO);
+
+
 	//FillRect(unsigned int x, unsigned int y, unsigned int w, unsigned int h, unsigned int c);
 	//FillRect(0, 0, 319, 239, 0x0DFE);
 	//FillRect(0, 0, 319, 239, 0x4c9d);
@@ -109,19 +120,23 @@ int main(void)
 //	FillRect(90, 60, 20, 20, 0x001F);
 
 
-//	LCD_Bitmap(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned char bitmap[]);
+	//LCD_Bitmap(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned char bitmap[]);
 //	LCD_Bitmap(100, 100, 49, 36, dkong);
 //	LCD_Bitmap(100, 100, 24, 30, sonic);
 
-	LCD_Bitmap(0, 0, 320, 240, fondoPinguin);
+	//LCD_Bitmap(0, 0, 320, 240, fondoPinguin);
+
+
 //	LCD_BitmapTransparent(100, 100, 49, 36, dkong, 0x4b7e);
 //	LCD_BitmapTransparent(50, 60,32,32,megaman,0x03ba);
 //	LCD_Bitmap(132, 100, 32, 32, megaman);
 
 
+	//FillRect(0, 0, 319, 206, 0x055b);
 
-//	FillRect(0, 0, 319, 206, 0x055b);
-//	LCD_Print("Hola Mundo", 20, 150, 2, 0x001F, 0x055b);
+
+	//LCD_Print("Parqueomatic", 65, 112, 2, 0xFFFF, 0x0000);
+
 //
 //
 //for (int x = 0; x < 319; x++) {
@@ -132,19 +147,23 @@ int main(void)
 //			x += 14;
 //		}
 
-	//LCD_BitmapTransparent(100, 116-36, 49, 36, dkong, 0x4b7e);
+	//LCD_BitmapTransparent(100, 116-36, 49, 36, link, 0x4b7e);
 	//LCD_Sprite(int x, int y, int width, int height, unsigned char bitmap[], int columns, int index, char flip, char offset);
 
-	//LCD_Sprite(100, 116-29, 42, 29, link, 4, 0, 0, 0);
+	//Puede reemplazarse por un carro
+	//LCD_Sprite(100, 40, 22, 15, link, 1, 0, 0, 0);
 
 
-	//  LCD_Print("Hola Mundo", 20, 100, 1, 0x001F, 0xCAB9);
+	  //LCD_Print("Hola Mundo", 20, 100, 1, 0x001F, 0xCAB9);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
+
+		Parqueo_Update();
+		    HAL_Delay(10);
 
 
 
