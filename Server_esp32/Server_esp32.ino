@@ -19,9 +19,11 @@ WebServer server(80);
 void enviarI2C(uint8_t dato) {
   Wire.beginTransmission(STM32_ADDR);
   Wire.write(dato);
-  Wire.endTransmission();
+  uint8_t error = Wire.endTransmission();
   Serial.print("I2C enviado: 0x");
-  Serial.println(dato, HEX);
+  Serial.print(dato, HEX);
+  Serial.print(" -> resultado: ");
+  Serial.println(error);
 }
 
 String paginaHTML() {
