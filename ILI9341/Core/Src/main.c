@@ -190,6 +190,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1) {
 
+		Parqueo_Update();
+		    HAL_Delay(10);
+
 
 		if (mpr_init == HAL_OK && HAL_GetTick() - ultimo_sensor >= 50)
 		    {
