@@ -14,7 +14,7 @@ const char* password = "12345678";
 
 // IP del ESP32 #1 (servidor) - se imprime en su Serial al arrancar
 // Cambiar esta IP por la que muestre el servidor
-const char* serverIP = "192.168.1.100";
+const char* serverIP = "10.65.161.153";
 
 // Direcciones I2C de las dos STM32
 #define STM32_7SEG    0x08  // STM32 con 7-seg + sensores 1-4

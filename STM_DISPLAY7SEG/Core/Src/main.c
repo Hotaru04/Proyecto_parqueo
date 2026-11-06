@@ -292,7 +292,7 @@ static void MX_I2C1_Init(void)
   hi2c1.Instance = I2C1;
   hi2c1.Init.ClockSpeed = 100000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 32;
+  hi2c1.Init.OwnAddress1 = 16;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -526,7 +526,7 @@ uint8_t leerSensores(void) {
         estado |= 0x04;  // bit 2
 
     // Sensor 4: IR/LM393 (activo LOW = detectado)
-    if (HAL_GPIO_ReadPin(IR_PORT, IR_PIN) == GPIO_PIN_RESET)
+    if (HAL_GPIO_ReadPin(IR_PORT, IR_PIN) == GPIO_PIN_SET)
         estado |= 0x08;  // bit 3
 
     return estado;
