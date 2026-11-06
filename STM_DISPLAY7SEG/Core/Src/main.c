@@ -536,7 +536,9 @@ uint8_t leerSensores(void) {
 void mostrar7seg(uint8_t digito) {
     if (digito > 8) digito = 8;
 
-    uint8_t seg = tabla7seg[digito];
+    uint8_t seg = ~tabla7seg[digito] & 0x7F;  // invertir los 7 bits
+
+    HAL_GPIO_WritePin(SEG_A_PORT, SEG_A_PIN, (seg & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
     HAL_GPIO_WritePin(SEG_A_PORT, SEG_A_PIN, (seg & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(SEG_B_PORT, SEG_B_PIN, (seg & 0x02) ? GPIO_PIN_SET : GPIO_PIN_RESET);
