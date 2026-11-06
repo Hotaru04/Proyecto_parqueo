@@ -5,6 +5,8 @@
 #include "parqueo.h"
 #include "ili9341.h"
 #include "main.h"
+#include "neopixel.h"
+
 
 #define ESPACIOS       8U
 #define PANTALLA_W     320
@@ -195,6 +197,7 @@ void Parqueo_SetOcupado(uint8_t espacio, uint8_t estado)
     estado = estado ? 1U : 0U;
     if (ocupado[indice] == estado) return; /* evita parpadeos */
     ocupado[indice] = estado;
+    NeoPixel_SetEstado(espacio, estado);
     dibujar_espacio(indice);
     dibujar_contadores();
     if (!en_demo) dibujar_pie("ESTADO ACTUALIZADO", indice);
