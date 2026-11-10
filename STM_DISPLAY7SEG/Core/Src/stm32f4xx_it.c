@@ -57,7 +57,7 @@
 /* External variables --------------------------------------------------------*/
 extern I2C_HandleTypeDef hi2c1;
 /* USER CODE BEGIN EV */
-
+extern DMA_HandleTypeDef hdma_tim4_ch3;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -227,5 +227,13 @@ void I2C1_ER_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+  * @brief DMA1 Stream7 global interrupt handler (TIM4_CH3 NeoPixel).
+  */
+void DMA1_Stream7_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&hdma_tim4_ch3);
+}
 
 /* USER CODE END 1 */
