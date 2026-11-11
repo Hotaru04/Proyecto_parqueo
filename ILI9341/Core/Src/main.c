@@ -23,6 +23,11 @@
 /* USER CODE BEGIN Includes */
 #include "ili9341.h"
 #include "Bitmaps.h"
+
+#include "parqueo.h"
+#include "mpr121.h"
+
+#include "neopixel.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,6 +37,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+#define PARQUEO_MODO_DEMO 0
 
 /* USER CODE END PD */
 
@@ -53,6 +60,33 @@ DMA_HandleTypeDef hdma_tim4_ch2;
 extern uint16_t fondo[];
 
 extern uint16_t fondoPinguin[];
+
+
+uint32_t ultimo_sensor = 0;
+
+uint8_t estables[4] = {0};
+uint8_t consecutivas[4] = {0};
+
+
+volatile uint8_t mpr_direccion = 0;
+volatile uint8_t mpr_init = 255;
+volatile uint8_t mpr_bits = 0;
+volatile uint8_t mpr_ecr = 0;
+
+volatile uint32_t mpr_ok = 0;
+volatile uint32_t mpr_fallos = 0;
+volatile uint32_t mpr_error = 0;
+
+
+volatile uint8_t prueba_etapa = 0;
+
+volatile uint8_t resultado_scan[4] = {
+    255, 255, 255, 255
+};
+
+volatile uint32_t error_scan[4] = {0};
+
+volatile uint32_t estado_i2c = 0;
 
 /* USER CODE END PV */
 
@@ -109,56 +143,86 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
-	LCD_Init();
 
-	LCD_Clear(0x00);
-	//FillRect(unsigned int x, unsigned int y, unsigned int w, unsigned int h, unsigned int c);
-	//FillRect(0, 0, 319, 239, 0x0DFE);
-	//FillRect(0, 0, 319, 239, 0x4c9d);
+  HAL_Delay(200);
 
-//	FillRect(50, 60, 20, 20, 0xF800);
-//
-//	FillRect(70, 60, 20, 20, 0x07E0);
-//
-//	FillRect(90, 60, 20, 20, 0x001F);
+  // Escaneo I2C solo para verificar que el sensor está presente
+  for (uint8_t i = 0; i < 4; i++)
+  {
+      uint8_t addr = 0x5A + i;
 
+      HAL_StatusTypeDef estado =
+          HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 2, 100);
 
-	//LCD_Bitmap(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned char bitmap[]);
-	//LCD_Bitmap(100, 100, 49, 36, dkong);
-	//LCD_Bitmap(100, 100, 24, 30, sonic);
+      resultado_scan[i] = estado;
+      error_scan[i] = HAL_I2C_GetError(&hi2c1);
 
-	//LCD_Bitmap(0, 0, 320, 240, fondoPinguin);
-	//LCD_BitmapTransparent(100, 100, 49, 36, dkong, 0x4b7e);
-	//LCD_BitmapTransparent(50, 60,32,32,megaman,0x03ba);
-	//LCD_Bitmap(132, 100, 32, 32, megaman);
+      if (estado == HAL_OK)
+      {
+          mpr_direccion = addr;
+          break;
+      }
+  }
 
+  estado_i2c = HAL_I2C_GetState(&hi2c1);
 
+  // Inicializar MPR121 si fue encontrado
+  if (mpr_direccion == 0x5A)
+  {
+      mpr_init = MPR121_Init(&hi2c1);
+  }
+  else
+  {
+      mpr_init = 254;   // no encontrado
+  }
 
-//	FillRect(0, 0, 319, 206, 0x055b);
-//	LCD_Print("Hola Mundo", 20, 150, 2, 0x001F, 0x055b);
-//
-//
-//for (int x = 0; x < 319; x++) {
-//			LCD_Bitmap(x, 116, 15, 15, tile);
-//			LCD_Bitmap(x, 68, 15, 15, tile);
-//			LCD_Bitmap(x, 207, 15, 15, tile);
-//			LCD_Bitmap(x, 223, 15, 15, tile);
-//			x += 14;
-//		}
-
-	//LCD_BitmapTransparent(100, 116-36, 49, 36, dkong, 0x4b7e);
-	//LCD_Sprite(int x, int y, int width, int height, unsigned char bitmap[], int columns, int index, char flip, char offset);
-
-	//LCD_Sprite(100, 116-29, 42, 29, link, 4, 0, 0, 0);
-
-
-	//  LCD_Print("Hola Mundo", 20, 100, 1, 0x001F, 0xCAB9);
+  LCD_Init();
+  Parqueo_Init(0);
+  NeoPixel_Init();
+//  NeoPixel_SetEstado(1, 1);
+//  NeoPixel_SetEstado(2, 1);
+//  NeoPixel_SetEstado(3, 1);
+//  NeoPixel_SetEstado(4, 1);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
+
+		Parqueo_Update();
+		    HAL_Delay(10);
+
+
+		if (mpr_init == HAL_OK && HAL_GetTick() - ultimo_sensor >= 50)
+		    {
+		        ultimo_sensor = HAL_GetTick();
+
+		        uint8_t lectura = 0;
+
+		        if (MPR121_Leer4(&hi2c1, &lectura) == HAL_OK)
+		        {
+		            mpr_bits = lectura;
+		            mpr_ok++;
+
+		            for (uint8_t i = 0; i < 4; i++)
+		            {
+		                uint8_t nuevo = (lectura >> i) & 1;
+		                Parqueo_SetOcupado(i + 1, nuevo);
+		            }
+		        }
+		        else
+		        {
+		            mpr_fallos++;
+		            mpr_ecr = HAL_I2C_GetError(&hi2c1);
+		        }
+		    }
+
+		    Parqueo_Update();
+
+
+		    NeoPixel_Update();
+		    HAL_Delay(10);
 
 
 
