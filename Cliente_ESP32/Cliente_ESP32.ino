@@ -12,9 +12,7 @@
 const char* ssid     = "Redmi15";
 const char* password = "12345678";
 
-// IP del ESP32 #1 (servidor) - se imprime en su Serial al arrancar
-// Cambiar esta IP por la que muestre el servidor
-const char* serverIP = "10.65.161.153";
+const char* serverIP = "10.65.161.107";
 
 // Direcciones I2C de las dos STM32
 #define STM32_7SEG    0x08  // STM32 con 7-seg + sensores 1-4
@@ -26,6 +24,10 @@ const char* serverIP = "10.65.161.153";
 // ===== VARIABLES =====
 uint8_t grupoA = 0x00;  // 4 bits: parqueos 1-4 (STM32 Abner)
 uint8_t grupoB = 0x00;  // 4 bits: parqueos 5-8 (STM32 companero)
+
+// Comandos de servos recibidos del servidor web
+uint8_t servo1 = 0;  // 0=cerrada, 1=abierta
+uint8_t servo2 = 0;
 
 unsigned long ultimaLectura = 0;
 
@@ -88,7 +90,8 @@ uint8_t leerI2C(uint8_t direccion) {
   return dato;
 }
 
-/* Enviar datos al servidor ESP32 #1 por HTTP */
+/* Enviar datos al servidor ESP32 #1 por HTTP
+ * La respuesta trae "servo1,servo2" para controlar talanqueras */
 void enviarAlServidor(uint8_t gA, uint8_t gB) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi desconectado!");
@@ -98,8 +101,6 @@ void enviarAlServidor(uint8_t gA, uint8_t gB) {
   HTTPClient http;
 
   // Construir URL: /update?a=XX&b=XX
-  // a = grupo A (4 bits, parqueos 1-4)
-  // b = grupo B (4 bits, parqueos 5-8)
   String url = "http://";
   url += serverIP;
   url += "/update?a=";
@@ -111,7 +112,17 @@ void enviarAlServidor(uint8_t gA, uint8_t gB) {
   int httpCode = http.GET();
 
   if (httpCode == 200) {
-    Serial.println("Datos enviados al servidor OK");
+    // Respuesta: "servo1,servo2"
+    String resp = http.getString();
+    int coma = resp.indexOf(',');
+    if (coma > 0) {
+      servo1 = (uint8_t)resp.substring(0, coma).toInt();
+      servo2 = (uint8_t)resp.substring(coma + 1).toInt();
+    }
+    Serial.print("OK -> S1=");
+    Serial.print(servo1);
+    Serial.print(" S2=");
+    Serial.println(servo2);
   } else {
     Serial.print("Error HTTP: ");
     Serial.println(httpCode);
@@ -138,21 +149,25 @@ void loop() {
       grupoB = datoB;
     }
 
-    // 3. Reenviar datos cruzados para que cada STM32 tenga los 8 parqueos
-
-    escribirI2C(STM32_7SEG, grupoB);
-    delay(10);  // pequeña pausa entre transacciones I2C
+    // 3. Reenviar datos cruzados
+    // Al STM32_7SEG: grupoB (bits 0-3) + servo1 (bit 4) + servo2 (bit 5)
+    uint8_t byteParaAbner = (grupoB & 0x0F) | ((servo1 & 0x01) << 4) | ((servo2 & 0x01) << 5);
+    escribirI2C(STM32_7SEG, byteParaAbner);
+    delay(10);
     escribirI2C(STM32_TFT, grupoA);
     delay(10);
 
     // 4. Debug
-    Serial.print("Grupo A (1-4): 0b");
+    Serial.print("A: 0b");
     for (int i = 3; i >= 0; i--) Serial.print((grupoA >> i) & 1);
-    Serial.print("  |  Grupo B (5-8): 0b");
+    Serial.print("  B: 0b");
     for (int i = 3; i >= 0; i--) Serial.print((grupoB >> i) & 1);
-    Serial.println();
+    Serial.print("  Servo: ");
+    Serial.print(servo1);
+    Serial.print(",");
+    Serial.println(servo2);
 
-    // 5. Enviar al servidor
+    // 5. Enviar al servidor (y recibir comandos de servo)
     enviarAlServidor(grupoA, grupoB);
   }
 }
