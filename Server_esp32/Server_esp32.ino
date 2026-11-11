@@ -19,6 +19,10 @@ WebServer server(80);
 uint8_t grupoA = 0x00;
 uint8_t grupoB = 0x00;
 
+// ===== ESTADO DE TALANQUERAS =====
+uint8_t servo1 = 0;  // 0=cerrada, 1=abierta
+uint8_t servo2 = 0;
+
 /* --- Generar pagina HTML --- */
 String paginaHTML() {
   // Contar libres
@@ -35,12 +39,20 @@ String paginaHTML() {
   html += "<title>Parqueo</title>";
   html += "<style>";
   html += "body{font-family:Arial;text-align:center;margin:20px;}";
+  html += "body{font-family:Arial;text-align:center;margin:20px;background:#1a1a2e;color:#eee;}";
   html += "table{margin:0 auto;border-collapse:collapse;}";
   html += "td{border:1px solid #333;padding:15px 25px;font-size:18px;min-width:80px;}";
   html += ".libre{background:#4CAF50;color:white;}";
   html += ".ocupado{background:#F44336;color:white;}";
   html += "h1{margin-bottom:5px;}";
   html += "h2{margin-top:5px;color:#555;}";
+  html += "h2{margin-top:5px;color:#aaa;}";
+  html += ".btn-container{margin:20px auto;display:flex;justify-content:center;gap:20px;flex-wrap:wrap;}";
+  html += ".btn{display:inline-block;padding:14px 28px;font-size:18px;font-weight:bold;";
+  html += "border:none;border-radius:8px;cursor:pointer;text-decoration:none;color:white;min-width:200px;}";
+  html += ".btn-abrir{background:#2196F3;}";
+  html += ".btn-cerrar{background:#FF9800;}";
+  html += ".estado-servo{font-size:14px;color:#aaa;margin-top:4px;}";
   html += "</style>";
   html += "</head><body>";
 
@@ -55,6 +67,12 @@ String paginaHTML() {
   html += "<tr>";
   for (int i = 0; i < 4; i++) {
     bool ocupado = grupoA & (1 << i);
+  // Fila 1: Grupo A (parqueos 1-4) con remapeo fisico
+  // Sensor3->P1, Sensor4->P2, Sensor1->P3, Sensor2->P4
+  html += "<tr>";
+  int mapaA[] = {2, 3, 0, 1};
+  for (int i = 0; i < 4; i++) {
+    bool ocupado = grupoA & (1 << mapaA[i]);
     html += "<td class='";
     html += ocupado ? "ocupado" : "libre";
     html += "'>";
@@ -79,6 +97,33 @@ String paginaHTML() {
 
   html += "</table>";
 
+  // Botones de talanqueras
+  html += "<div class='btn-container'>";
+
+  // Talanquera 1
+  html += "<div>";
+  if (servo1) {
+    html += "<a class='btn btn-cerrar' href='/servo?s=1&v=0'>Cerrar Talanquera 1</a>";
+    html += "<div class='estado-servo'>Estado: ABIERTA</div>";
+  } else {
+    html += "<a class='btn btn-abrir' href='/servo?s=1&v=1'>Abrir Talanquera 1</a>";
+    html += "<div class='estado-servo'>Estado: CERRADA</div>";
+  }
+  html += "</div>";
+
+  // Talanquera 2
+  html += "<div>";
+  if (servo2) {
+    html += "<a class='btn btn-cerrar' href='/servo?s=2&v=0'>Cerrar Talanquera 2</a>";
+    html += "<div class='estado-servo'>Estado: ABIERTA</div>";
+  } else {
+    html += "<a class='btn btn-abrir' href='/servo?s=2&v=1'>Abrir Talanquera 2</a>";
+    html += "<div class='estado-servo'>Estado: CERRADA</div>";
+  }
+  html += "</div>";
+
+  html += "</div>";
+
   // Detalle por grupo
   html += "<p><b>Grupo A (1-4):</b> 0b";
   for (int i = 3; i >= 0; i--) html += String((grupoA >> i) & 1);
@@ -96,6 +141,7 @@ void handleRoot() {
 }
 
 /* --- Ruta: actualizar datos (llamada por ESP32 #2) --- */
+/* Responde con estado de servos para que el cliente los reenvie al STM32 */
 void handleUpdate() {
   if (server.hasArg("a")) {
     grupoA = server.arg("a").toInt() & 0x0F;
@@ -110,6 +156,32 @@ void handleUpdate() {
   Serial.println(grupoB, BIN);
 
   server.send(200, "text/plain", "OK");
+  Serial.print(grupoB, BIN);
+  Serial.print(" S1=");
+  Serial.print(servo1);
+  Serial.print(" S2=");
+  Serial.println(servo2);
+
+  // Respuesta: "servo1,servo2" para que el cliente los lea
+  String resp = String(servo1) + "," + String(servo2);
+  server.send(200, "text/plain", resp);
+}
+
+/* --- Ruta: control de talanqueras --- */
+void handleServo() {
+  if (server.hasArg("s") && server.hasArg("v")) {
+    int s = server.arg("s").toInt();
+    int v = server.arg("v").toInt();
+    if (s == 1) servo1 = v ? 1 : 0;
+    if (s == 2) servo2 = v ? 1 : 0;
+    Serial.print("Servo cmd -> S");
+    Serial.print(s);
+    Serial.print("=");
+    Serial.println(v);
+  }
+  // Redirigir a pagina principal
+  server.sendHeader("Location", "/");
+  server.send(302, "text/plain", "");
 }
 
 /* --- Ruta: estado JSON (debug) --- */
@@ -118,6 +190,10 @@ void handleStatus() {
   json += String(grupoA);
   json += ",\"grupoB\":";
   json += String(grupoB);
+  json += ",\"servo1\":";
+  json += String(servo1);
+  json += ",\"servo2\":";
+  json += String(servo2);
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -149,6 +225,7 @@ void setup() {
   // Configurar rutas
   server.on("/", handleRoot);
   server.on("/update", handleUpdate);
+  server.on("/servo", handleServo);
   server.on("/status", handleStatus);
   server.onNotFound(handleNotFound);
 

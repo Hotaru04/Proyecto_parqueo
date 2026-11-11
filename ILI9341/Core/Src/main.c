@@ -217,6 +217,42 @@ int main(void)
       i2c2_error = HAL_I2C_GetError(&hi2c2);
       Error_Handler();
   }
+
+  HAL_Delay(200);
+
+  // Escaneo I2C solo para verificar que el sensor está presente
+  for (uint8_t i = 0; i < 4; i++)
+  {
+      uint8_t addr = 0x5A + i;
+
+      HAL_StatusTypeDef estado =
+          HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 2, 100);
+
+      resultado_scan[i] = estado;
+      error_scan[i] = HAL_I2C_GetError(&hi2c1);
+
+      if (estado == HAL_OK)
+      {
+          mpr_direccion = addr;
+          break;
+      }
+  }
+
+  estado_i2c = HAL_I2C_GetState(&hi2c1);
+
+  // Inicializar MPR121 si fue encontrado
+  if (mpr_direccion == 0x5A)
+  {
+      mpr_init = MPR121_Init(&hi2c1);
+  }
+  else
+  {
+      mpr_init = 254;   // no encontrado
+  }
+
+  LCD_Init();
+  Parqueo_Init(0);
+  NeoPixel_Init();
 //  NeoPixel_SetEstado(1, 1);
 //  NeoPixel_SetEstado(2, 1);
 //  NeoPixel_SetEstado(3, 1);
@@ -243,6 +279,11 @@ int main(void)
 
 		    // Leer sensores locales del MPR121
 		    if (mpr_init == HAL_OK && HAL_GetTick() - ultimo_sensor >= 50)
+		Parqueo_Update();
+		    HAL_Delay(10);
+
+
+		if (mpr_init == HAL_OK && HAL_GetTick() - ultimo_sensor >= 50)
 		    {
 		        ultimo_sensor = HAL_GetTick();
 
@@ -255,6 +296,11 @@ int main(void)
 
 		            // Guardar los cuatro sensores locales P5-P8
 		            grupoB_local = lectura & 0x0F;
+		            for (uint8_t i = 0; i < 4; i++)
+		            {
+		                uint8_t nuevo = (lectura >> i) & 1;
+		                Parqueo_SetOcupado(i + 1, nuevo);
+		            }
 		        }
 		        else
 		        {
@@ -270,6 +316,10 @@ int main(void)
 		    Parqueo_Update();
 		    NeoPixel_Update();
 
+		    Parqueo_Update();
+
+
+		    NeoPixel_Update();
 		    HAL_Delay(10);
 
 

@@ -202,6 +202,7 @@ void Parqueo_SetOcupado(uint8_t espacio, uint8_t estado)
     // Cambiar a:
     if (espacio >= 5U && espacio <= 8U)
         NeoPixel_SetEstado(espacio - 4U, estado);
+    NeoPixel_SetEstado(espacio, estado);
     dibujar_espacio(indice);
     dibujar_contadores();
     if (!en_demo) dibujar_pie("ESTADO ACTUALIZADO", indice);

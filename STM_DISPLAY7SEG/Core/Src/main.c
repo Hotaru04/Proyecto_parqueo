@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <string.h>
+#include "neopixel.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -69,6 +70,13 @@
 #define DISTANCIA_UMBRAL_CM  30    // Menos de 30cm = carro detectado
 #define HC_SR04_TIMEOUT_US   30000 // Timeout de medicion (30ms)
 
+#define DISTANCIA_UMBRAL_CM  5     // Menos o igual a 5cm = carro detectado
+#define HC_SR04_TIMEOUT_US   30000 // Timeout de medicion (30ms)
+
+/* --- Servos (TIM3 a 50Hz, 1 count = 1us) --- */
+#define SERVO_CERRADO  1000   // 1ms = ~0 grados (barrera abajo)
+#define SERVO_ABIERTO  1500   // 1.5ms = ~90 grados (barrera arriba)
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -80,6 +88,9 @@
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
+DMA_HandleTypeDef hdma_tim4_ch3;
 
 UART_HandleTypeDef huart2;
 
@@ -89,6 +100,16 @@ volatile uint8_t grupoB = 0x00;    // 4 sensores del companero (recibidos por I2
 volatile uint8_t i2cTxByte = 0x00; // Byte a transmitir cuando el master lee
 volatile uint8_t i2cRxByte = 0x00; // Byte recibido cuando el master escribe
 char debugMsg[100];
+
+/* --- Distancias HC-SR04 (para debug, se llenan en leerSensores) --- */
+uint32_t debug_dist1 = 0;
+uint32_t debug_dist2 = 0;
+
+/* --- Servos (comandos recibidos por I2C, bits 4-5) --- */
+volatile uint8_t servo1_cmd = 0;   // 0=cerrado(0°), 1=abierto(90°)
+volatile uint8_t servo2_cmd = 0;
+uint8_t servo_toggle = 0;         // Estado toggle del boton B1
+uint8_t btn_prev = 1;             // B1 previo (1=suelto, activo LOW)
 
 /* Tabla 7-segmentos: digitos 0-8 (catodo comun)
  * Formato bits: 0gfedcba
@@ -116,6 +137,12 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_DMA_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_USART2_UART_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_TIM4_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void delayUs(uint32_t us);
 uint32_t medirDistanciaCm(GPIO_TypeDef *trigPort, uint16_t trigPin,
@@ -162,6 +189,12 @@ int main(void)
   MX_I2C1_Init();
   MX_USART2_UART_Init();
   MX_TIM2_Init();
+  MX_DMA_Init();
+  MX_I2C1_Init();
+  MX_USART2_UART_Init();
+  MX_TIM2_Init();
+  MX_TIM4_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   // Arrancar timer de microsegundos
   HAL_TIM_Base_Start(&htim2);
@@ -176,6 +209,15 @@ int main(void)
   // Mostrar 8 (todos libres) al inicio
   mostrar7seg(8);
 
+  NeoPixel_Init();
+  NeoPixel_Update();  // Test: enviar 8 LEDs verdes al arranque
+  HAL_Delay(10);      // Esperar DMA (~1ms real, 10ms de margen)
+  sprintf(debugMsg, "NeoPixel test: 8 verdes enviados por DMA\r\n");
+  HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
+
+  // Arrancar PWM de servos (posicion cerrada por defecto)
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  // Servo 1 en PB4
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  // Servo 2 en PB5
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -201,6 +243,8 @@ int main(void)
 	    uint32_t d1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
 	    uint32_t d2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
 	    sprintf(debugMsg, "D1:%lucm D2:%lucm\r\n", d1, d2);
+	    // DEBUG: ver distancias (ya medidas en leerSensores, sin repetir)
+	    sprintf(debugMsg, "D1:%lucm D2:%lucm\r\n", debug_dist1, debug_dist2);
 	    HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
 
 	    uint8_t libres = 8 - ocupados;
@@ -220,6 +264,41 @@ int main(void)
 	            (grupoB & 0x01) ? '1' : '0',
 	            libres);
 	    HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
+
+	    // 5. Actualizar NeoPixels segun estado de parqueos
+	    // Mapeo fisico: Sensor1->NP3, Sensor2->NP4, Sensor3->NP1, Sensor4->NP2
+	    NeoPixel_SetEstado(1, (grupoA >> 2) & 1);  // NP1 <- Sensor 3 (bit 2)
+	    NeoPixel_SetEstado(2, (grupoA >> 3) & 1);  // NP2 <- Sensor 4 (bit 3)
+	    NeoPixel_SetEstado(3, (grupoA >> 0) & 1);  // NP3 <- Sensor 1 (bit 0)
+	    NeoPixel_SetEstado(4, (grupoA >> 1) & 1);  // NP4 <- Sensor 2 (bit 1)
+	    for (int i = 0; i < 4; i++) {
+	        NeoPixel_SetEstado(i + 5, (grupoB >> i) & 1);  // espacios 5-8
+	    }
+	    NeoPixel_Update();
+
+	    // 6. Actualizar servos segun comandos I2C (bits 4-5)
+	    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,
+	        servo1_cmd ? SERVO_ABIERTO : SERVO_CERRADO);
+	    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2,
+	        servo2_cmd ? SERVO_ABIERTO : SERVO_CERRADO);
+
+	    // 7. Polling del boton B1 (PC13) para toggle de servos
+	    uint8_t btn_now = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
+	    if (btn_prev == 1 && btn_now == 0) {
+	        // Flanco de bajada detectado: toggle ambos servos
+	        servo_toggle = !servo_toggle;
+	        servo1_cmd = servo_toggle;
+	        servo2_cmd = servo_toggle;
+	        sprintf(debugMsg, "BTN: Servos -> %s\r\n",
+	                servo_toggle ? "ABIERTO(90)" : "CERRADO(0)");
+	        HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
+	        // Actualizar servos de inmediato (no esperar al paso 6)
+	        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,
+	            servo1_cmd ? SERVO_ABIERTO : SERVO_CERRADO);
+	        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2,
+	            servo2_cmd ? SERVO_ABIERTO : SERVO_CERRADO);
+	    }
+	    btn_prev = btn_now;
 
 	    HAL_Delay(500);
 
@@ -354,6 +433,128 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 83;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 19999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 1000;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 104;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+  HAL_TIM_MspPostInit(&htim4);
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -383,6 +584,22 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream7_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream7_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream7_IRQn);
 
 }
 
@@ -523,6 +740,17 @@ uint8_t leerSensores(void) {
 
     // Sensor 3: HW-488 (activo LOW = detectado)
     if (HAL_GPIO_ReadPin(HW488_PORT, HW488_PIN) == GPIO_PIN_RESET)
+    debug_dist1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
+    if (debug_dist1 <= DISTANCIA_UMBRAL_CM)
+        estado |= 0x01;  // bit 0
+
+    // Sensor 2: HC-SR04 #2
+    debug_dist2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
+    if (debug_dist2 <= DISTANCIA_UMBRAL_CM)
+        estado |= 0x02;  // bit 1
+
+    // Sensor 3: IR tipo LM393 (activo HIGH = detectado)
+    if (HAL_GPIO_ReadPin(HW488_PORT, HW488_PIN) == GPIO_PIN_SET)
         estado |= 0x04;  // bit 2
 
     // Sensor 4: IR/LM393 (activo LOW = detectado)
@@ -593,6 +821,10 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
     {
         // Guardar los 4 bits del companero
         grupoB = i2cRxByte & 0x0F;
+        // Guardar los 4 bits del companero + comandos de servo
+        grupoB = i2cRxByte & 0x0F;
+        servo1_cmd = (i2cRxByte >> 4) & 0x01;
+        servo2_cmd = (i2cRxByte >> 5) & 0x01;
     }
 }
 
