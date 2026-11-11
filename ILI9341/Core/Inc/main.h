@@ -69,8 +69,10 @@ void Error_Handler(void);
 #define LCD_RS_GPIO_Port GPIOA
 #define LCD_CS_Pin GPIO_PIN_0
 #define LCD_CS_GPIO_Port GPIOB
-#define LCD_D6_Pin GPIO_PIN_10
+#define LCD_D6_Pin GPIO_PIN_12
 #define LCD_D6_GPIO_Port GPIOB
+#define LCD_D3_Pin GPIO_PIN_13
+#define LCD_D3_GPIO_Port GPIOB
 #define LCD_D1_Pin GPIO_PIN_7
 #define LCD_D1_GPIO_Port GPIOC
 #define LCD_D7_Pin GPIO_PIN_8
@@ -79,8 +81,6 @@ void Error_Handler(void);
 #define LCD_D0_GPIO_Port GPIOA
 #define LCD_D2_Pin GPIO_PIN_10
 #define LCD_D2_GPIO_Port GPIOA
-#define LCD_D3_Pin GPIO_PIN_3
-#define LCD_D3_GPIO_Port GPIOB
 #define LCD_D5_Pin GPIO_PIN_4
 #define LCD_D5_GPIO_Port GPIOB
 #define LCD_D4_Pin GPIO_PIN_5

@@ -23,6 +23,11 @@
 /* USER CODE BEGIN Includes */
 #include "ili9341.h"
 #include "Bitmaps.h"
+
+#include "parqueo.h"
+#include "mpr121.h"
+
+#include "neopixel.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +38,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define PARQUEO_MODO_DEMO 0
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,6 +49,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 
 SPI_HandleTypeDef hspi1;
 
@@ -54,6 +62,59 @@ extern uint16_t fondo[];
 
 extern uint16_t fondoPinguin[];
 
+
+uint32_t ultimo_sensor = 0;
+
+uint8_t estables[4] = {0};
+uint8_t consecutivas[4] = {0};
+
+
+volatile uint8_t mpr_direccion = 0;
+volatile uint8_t mpr_init = 255;
+volatile uint8_t mpr_bits = 0;
+volatile uint8_t mpr_ecr = 0;
+
+volatile uint32_t mpr_ok = 0;
+volatile uint32_t mpr_fallos = 0;
+volatile uint32_t mpr_error = 0;
+
+
+volatile uint8_t prueba_etapa = 0;
+
+volatile uint8_t resultado_scan[4] = {
+    255, 255, 255, 255
+};
+
+volatile uint32_t error_scan[4] = {0};
+
+volatile uint32_t estado_i2c = 0;
+
+/* ==========================================
+ * COMUNICACION I2C2 CON ESP32 MAESTRO
+ * Direccion del TFT: 0x09
+ * ========================================== */
+
+// Mis cuatro sensores MPR121: P5-P8
+volatile uint8_t grupoB_local = 0x00;
+
+// Datos recibidos del ESP32: P1-P4
+volatile uint8_t grupoA_recibido = 0x00;
+
+// Banderas de comunicacion
+volatile uint8_t i2c2_rx_valido = 0;
+volatile uint8_t i2c2_rearmar = 0;
+
+// Buffers de transmision y recepcion
+static uint8_t i2c2_tx_byte = 0x00;
+static uint8_t i2c2_rx_byte = 0x00;
+
+// Variables de diagnostico
+volatile uint32_t i2c2_error = 0;
+volatile uint32_t i2c2_tx_count = 0;
+volatile uint32_t i2c2_rx_count = 0;
+
+volatile uint32_t i2c2_listen_status = 0xFFFFFFFF;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -64,6 +125,7 @@ static void MX_SPI1_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -107,58 +169,108 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM1_Init();
   MX_TIM4_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
-	LCD_Init();
 
-	LCD_Clear(0x00);
-	//FillRect(unsigned int x, unsigned int y, unsigned int w, unsigned int h, unsigned int c);
-	//FillRect(0, 0, 319, 239, 0x0DFE);
-	//FillRect(0, 0, 319, 239, 0x4c9d);
+  HAL_Delay(200);
 
-//	FillRect(50, 60, 20, 20, 0xF800);
-//
-//	FillRect(70, 60, 20, 20, 0x07E0);
-//
-//	FillRect(90, 60, 20, 20, 0x001F);
+  // Escaneo I2C solo para verificar que el sensor está presente
+  for (uint8_t i = 0; i < 4; i++)
+  {
+      uint8_t addr = 0x5A + i;
 
+      HAL_StatusTypeDef estado =
+          HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 2, 100);
 
-	//LCD_Bitmap(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned char bitmap[]);
-	//LCD_Bitmap(100, 100, 49, 36, dkong);
-	//LCD_Bitmap(100, 100, 24, 30, sonic);
+      resultado_scan[i] = estado;
+      error_scan[i] = HAL_I2C_GetError(&hi2c1);
 
-	//LCD_Bitmap(0, 0, 320, 240, fondoPinguin);
-	//LCD_BitmapTransparent(100, 100, 49, 36, dkong, 0x4b7e);
-	//LCD_BitmapTransparent(50, 60,32,32,megaman,0x03ba);
-	//LCD_Bitmap(132, 100, 32, 32, megaman);
+      if (estado == HAL_OK)
+      {
+          mpr_direccion = addr;
+          break;
+      }
+  }
 
+  estado_i2c = HAL_I2C_GetState(&hi2c1);
 
+  // Inicializar MPR121 si fue encontrado
+  if (mpr_direccion == 0x5A)
+  {
+      mpr_init = MPR121_Init(&hi2c1);
+  }
+  else
+  {
+      mpr_init = 254;   // no encontrado
+  }
 
-//	FillRect(0, 0, 319, 206, 0x055b);
-//	LCD_Print("Hola Mundo", 20, 150, 2, 0x001F, 0x055b);
-//
-//
-//for (int x = 0; x < 319; x++) {
-//			LCD_Bitmap(x, 116, 15, 15, tile);
-//			LCD_Bitmap(x, 68, 15, 15, tile);
-//			LCD_Bitmap(x, 207, 15, 15, tile);
-//			LCD_Bitmap(x, 223, 15, 15, tile);
-//			x += 14;
-//		}
+  LCD_Init();
+  Parqueo_Init(0);
+  NeoPixel_Init();
 
-	//LCD_BitmapTransparent(100, 116-36, 49, 36, dkong, 0x4b7e);
-	//LCD_Sprite(int x, int y, int width, int height, unsigned char bitmap[], int columns, int index, char flip, char offset);
+  // Activar I2C2 como esclavo del ESP32
+  i2c2_listen_status = HAL_I2C_EnableListen_IT(&hi2c2);
 
-	//LCD_Sprite(100, 116-29, 42, 29, link, 4, 0, 0, 0);
-
-
-	//  LCD_Print("Hola Mundo", 20, 100, 1, 0x001F, 0xCAB9);
+  if (i2c2_listen_status != HAL_OK)
+  {
+      i2c2_error = HAL_I2C_GetError(&hi2c2);
+      Error_Handler();
+  }
+//  NeoPixel_SetEstado(1, 1);
+//  NeoPixel_SetEstado(2, 1);
+//  NeoPixel_SetEstado(3, 1);
+//  NeoPixel_SetEstado(4, 1);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
+
+		 // Recuperar escucha I2C2 si ocurrió un error
+		    if (i2c2_rearmar)
+		    {
+		        i2c2_rearmar = 0;
+
+		        i2c2_listen_status = HAL_I2C_EnableListen_IT(&hi2c2);
+
+		        if (i2c2_listen_status != HAL_OK)
+		        {
+		            i2c2_rearmar = 1;
+		        }
+		    }
+
+		    // Leer sensores locales del MPR121
+		    if (mpr_init == HAL_OK && HAL_GetTick() - ultimo_sensor >= 50)
+		    {
+		        ultimo_sensor = HAL_GetTick();
+
+		        uint8_t lectura = 0;
+
+		        if (MPR121_Leer4(&hi2c1, &lectura) == HAL_OK)
+		        {
+		            mpr_bits = lectura;
+		            mpr_ok++;
+
+		            // Guardar los cuatro sensores locales P5-P8
+		            grupoB_local = lectura & 0x0F;
+		        }
+		        else
+		        {
+		            mpr_fallos++;
+		            mpr_ecr = HAL_I2C_GetError(&hi2c1);
+		        }
+		    }
+
+		    // Actualizar los ocho parqueos
+		    Parqueo_ActualizarGrupos(grupoA_recibido, grupoB_local);
+
+		    // Actualizar pantalla y NeoPixels
+		    Parqueo_Update();
+		    NeoPixel_Update();
+
+		    HAL_Delay(10);
 
 
 
@@ -308,6 +420,40 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 18;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
 
 }
 
@@ -504,13 +650,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LCD_CS_Pin LCD_D6_Pin LCD_D3_Pin LCD_D5_Pin
-                           LCD_D4_Pin */
-  GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_D6_Pin|LCD_D3_Pin|LCD_D5_Pin
-                          |LCD_D4_Pin;
+  /*Configure GPIO pins : LCD_CS_Pin LCD_D5_Pin LCD_D4_Pin */
+  GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_D5_Pin|LCD_D4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LCD_D6_Pin LCD_D3_Pin */
+  GPIO_InitStruct.Pin = LCD_D6_Pin|LCD_D3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -518,6 +669,105 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+
+/* ==========================================
+ * CALLBACKS I2C2 - STM32 TFT
+ * ESP32 MAESTRO / STM32 ESCLAVO 0x09
+ * ========================================== */
+
+void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c,
+                          uint8_t TransferDirection,
+                          uint16_t AddrMatchCode)
+{
+    (void)AddrMatchCode;
+
+    if (hi2c->Instance != I2C2)
+        return;
+
+    if (TransferDirection == I2C_DIRECTION_RECEIVE)
+    {
+        // ESP32 quiere LEER:
+        // Enviar los cuatro sensores locales P5-P8
+
+        i2c2_tx_byte = grupoB_local & 0x0F;
+
+        if (HAL_I2C_Slave_Seq_Transmit_IT(
+                hi2c,
+                &i2c2_tx_byte,
+                1,
+                I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
+        {
+            i2c2_error = HAL_I2C_GetError(hi2c);
+        }
+    }
+    else
+    {
+        // ESP32 quiere ESCRIBIR:
+        // Recibir los sensores P1-P4
+
+        if (HAL_I2C_Slave_Seq_Receive_IT(
+                hi2c,
+                &i2c2_rx_byte,
+                1,
+                I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
+        {
+            i2c2_error = HAL_I2C_GetError(hi2c);
+        }
+    }
+}
+
+
+/* Transmision completada */
+void HAL_I2C_SlaveTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C2)
+    {
+        i2c2_tx_count++;
+    }
+}
+
+
+/* Recepcion completada */
+void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C2)
+    {
+        // Guardar los cuatro bits recibidos
+        grupoA_recibido = i2c2_rx_byte & 0x0F;
+
+        i2c2_rx_valido = 1;
+
+        i2c2_rx_count++;
+    }
+}
+
+
+/* Transaccion terminada: volver a escuchar */
+void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C2)
+    {
+        i2c2_listen_status = HAL_I2C_EnableListen_IT(hi2c);
+
+        if (i2c2_listen_status != HAL_OK)
+        {
+            i2c2_rearmar = 1;
+        }
+    }
+}
+
+
+/* Manejo de errores */
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C2)
+    {
+        i2c2_error = hi2c->ErrorCode;
+
+        i2c2_rearmar = 1;
+    }
+}
 
 /* USER CODE END 4 */
 
