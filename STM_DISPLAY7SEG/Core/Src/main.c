@@ -67,7 +67,7 @@
 #define SEG_G_PIN   GPIO_PIN_9
 
 /* --- Umbrales --- */
-#define DISTANCIA_UMBRAL_CM  30    // Menos de 30cm = carro detectado
+#define DISTANCIA_UMBRAL_CM  5     // Menos o igual a 5cm = carro detectado
 #define HC_SR04_TIMEOUT_US   30000 // Timeout de medicion (30ms)
 
 /* --- Servos (TIM3 a 50Hz, 1 count = 1us) --- */
@@ -97,6 +97,10 @@ volatile uint8_t grupoB = 0x00;    // 4 sensores del companero (recibidos por I2
 volatile uint8_t i2cTxByte = 0x00; // Byte a transmitir cuando el master lee
 volatile uint8_t i2cRxByte = 0x00; // Byte recibido cuando el master escribe
 char debugMsg[100];
+
+/* --- Distancias HC-SR04 (para debug, se llenan en leerSensores) --- */
+uint32_t debug_dist1 = 0;
+uint32_t debug_dist2 = 0;
 
 /* --- Servos (comandos recibidos por I2C, bits 4-5) --- */
 volatile uint8_t servo1_cmd = 0;   // 0=cerrado(0°), 1=abierto(90°)
@@ -226,10 +230,8 @@ int main(void)
 	        if (grupoB & (1 << i)) ocupados++;
 	    }
 
-	    // DEBUG: ver distancias crudas
-	    uint32_t d1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
-	    uint32_t d2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
-	    sprintf(debugMsg, "D1:%lucm D2:%lucm\r\n", d1, d2);
+	    // DEBUG: ver distancias (ya medidas en leerSensores, sin repetir)
+	    sprintf(debugMsg, "D1:%lucm D2:%lucm\r\n", debug_dist1, debug_dist2);
 	    HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
 
 	    uint8_t libres = 8 - ocupados;
@@ -251,8 +253,12 @@ int main(void)
 	    HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
 
 	    // 5. Actualizar NeoPixels segun estado de parqueos
+	    // Mapeo fisico: Sensor1->NP3, Sensor2->NP4, Sensor3->NP1, Sensor4->NP2
+	    NeoPixel_SetEstado(1, (grupoA >> 2) & 1);  // NP1 <- Sensor 3 (bit 2)
+	    NeoPixel_SetEstado(2, (grupoA >> 3) & 1);  // NP2 <- Sensor 4 (bit 3)
+	    NeoPixel_SetEstado(3, (grupoA >> 0) & 1);  // NP3 <- Sensor 1 (bit 0)
+	    NeoPixel_SetEstado(4, (grupoA >> 1) & 1);  // NP4 <- Sensor 2 (bit 1)
 	    for (int i = 0; i < 4; i++) {
-	        NeoPixel_SetEstado(i + 1, (grupoA >> i) & 1);  // espacios 1-4
 	        NeoPixel_SetEstado(i + 5, (grupoB >> i) & 1);  // espacios 5-8
 	    }
 	    NeoPixel_Update();
@@ -710,13 +716,13 @@ uint8_t leerSensores(void) {
     uint8_t estado = 0x00;
 
     // Sensor 1: HC-SR04 #1
-    uint32_t dist1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
-    if (dist1 < DISTANCIA_UMBRAL_CM)
+    debug_dist1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
+    if (debug_dist1 <= DISTANCIA_UMBRAL_CM)
         estado |= 0x01;  // bit 0
 
     // Sensor 2: HC-SR04 #2
-    uint32_t dist2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
-    if (dist2 < DISTANCIA_UMBRAL_CM)
+    debug_dist2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
+    if (debug_dist2 <= DISTANCIA_UMBRAL_CM)
         estado |= 0x02;  // bit 1
 
     // Sensor 3: IR tipo LM393 (activo HIGH = detectado)
