@@ -38,12 +38,14 @@ String paginaHTML() {
   html += "<meta http-equiv='refresh' content='3'>";
   html += "<title>Parqueo</title>";
   html += "<style>";
+  html += "body{font-family:Arial;text-align:center;margin:20px;}";
   html += "body{font-family:Arial;text-align:center;margin:20px;background:#1a1a2e;color:#eee;}";
   html += "table{margin:0 auto;border-collapse:collapse;}";
   html += "td{border:1px solid #333;padding:15px 25px;font-size:18px;min-width:80px;}";
   html += ".libre{background:#4CAF50;color:white;}";
   html += ".ocupado{background:#F44336;color:white;}";
   html += "h1{margin-bottom:5px;}";
+  html += "h2{margin-top:5px;color:#555;}";
   html += "h2{margin-top:5px;color:#aaa;}";
   html += ".btn-container{margin:20px auto;display:flex;justify-content:center;gap:20px;flex-wrap:wrap;}";
   html += ".btn{display:inline-block;padding:14px 28px;font-size:18px;font-weight:bold;";
@@ -61,6 +63,10 @@ String paginaHTML() {
   // Tabla: 2 filas x 4 columnas
   html += "<table>";
 
+  // Fila 1: Grupo A (parqueos 1-4)
+  html += "<tr>";
+  for (int i = 0; i < 4; i++) {
+    bool ocupado = grupoA & (1 << i);
   // Fila 1: Grupo A (parqueos 1-4) con remapeo fisico
   // Sensor3->P1, Sensor4->P2, Sensor1->P3, Sensor2->P4
   html += "<tr>";
@@ -147,6 +153,9 @@ void handleUpdate() {
   Serial.print("Update -> A=");
   Serial.print(grupoA, BIN);
   Serial.print(" B=");
+  Serial.println(grupoB, BIN);
+
+  server.send(200, "text/plain", "OK");
   Serial.print(grupoB, BIN);
   Serial.print(" S1=");
   Serial.print(servo1);

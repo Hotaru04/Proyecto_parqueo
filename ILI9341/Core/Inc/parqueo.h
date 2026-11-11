@@ -12,5 +12,6 @@ void Parqueo_Update(void);
 void Parqueo_SetOcupado(uint8_t espacio, uint8_t ocupado);
 uint8_t Parqueo_GetOcupado(uint8_t espacio);
 uint8_t Parqueo_GetLibres(void);
+void Parqueo_ActualizarGrupos(uint8_t grupoA, uint8_t grupoB);
 
 #endif /* INC_PARQUEO_H_ */

@@ -92,10 +92,11 @@ void initLookup() {
 		else
 			entry.bsrrA |= (1 << (10 + 16));
 		// D3 -> PB3
-		if (val & 0x08)
-			entry.bsrrB |= (1 << 3);
+		// D3 -> PB13
+		if (val & 0x08U)
+		    entry.bsrrB |= (uint32_t)LCD_D3_Pin;
 		else
-			entry.bsrrB |= (1 << (3 + 16));
+		    entry.bsrrB |= ((uint32_t)LCD_D3_Pin << 16U);
 		// D4 -> PB5
 		if (val & 0x10)
 			entry.bsrrB |= (1 << 5);
@@ -107,10 +108,11 @@ void initLookup() {
 		else
 			entry.bsrrB |= (1 << (4 + 16));
 		// D6 -> PB10
-		if (val & 0x40)
-			entry.bsrrB |= (1 << 10);
+		// D6 -> PB12
+		if (val & 0x40U)
+		    entry.bsrrB |= (uint32_t)LCD_D6_Pin;
 		else
-			entry.bsrrB |= (1 << (10 + 16));
+		    entry.bsrrB |= ((uint32_t)LCD_D6_Pin << 16U);
 		// D7 -> PA8
 		if (val & 0x80)
 			entry.bsrrA |= (1 << 8);

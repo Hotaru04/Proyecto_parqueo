@@ -67,6 +67,9 @@
 #define SEG_G_PIN   GPIO_PIN_9
 
 /* --- Umbrales --- */
+#define DISTANCIA_UMBRAL_CM  30    // Menos de 30cm = carro detectado
+#define HC_SR04_TIMEOUT_US   30000 // Timeout de medicion (30ms)
+
 #define DISTANCIA_UMBRAL_CM  5     // Menos o igual a 5cm = carro detectado
 #define HC_SR04_TIMEOUT_US   30000 // Timeout de medicion (30ms)
 
@@ -131,6 +134,9 @@ const uint8_t tabla7seg[9] = {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_USART2_UART_Init(void);
+static void MX_TIM2_Init(void);
 static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
@@ -180,6 +186,9 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_I2C1_Init();
+  MX_USART2_UART_Init();
+  MX_TIM2_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_USART2_UART_Init();
@@ -230,6 +239,10 @@ int main(void)
 	        if (grupoB & (1 << i)) ocupados++;
 	    }
 
+	    // DEBUG: ver distancias crudas
+	    uint32_t d1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
+	    uint32_t d2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
+	    sprintf(debugMsg, "D1:%lucm D2:%lucm\r\n", d1, d2);
 	    // DEBUG: ver distancias (ya medidas en leerSensores, sin repetir)
 	    sprintf(debugMsg, "D1:%lucm D2:%lucm\r\n", debug_dist1, debug_dist2);
 	    HAL_UART_Transmit(&huart2, (uint8_t*)debugMsg, strlen(debugMsg), 100);
@@ -716,6 +729,17 @@ uint8_t leerSensores(void) {
     uint8_t estado = 0x00;
 
     // Sensor 1: HC-SR04 #1
+    uint32_t dist1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
+    if (dist1 < DISTANCIA_UMBRAL_CM)
+        estado |= 0x01;  // bit 0
+
+    // Sensor 2: HC-SR04 #2
+    uint32_t dist2 = medirDistanciaCm(TRIG2_PORT, TRIG2_PIN, ECHO2_PORT, ECHO2_PIN);
+    if (dist2 < DISTANCIA_UMBRAL_CM)
+        estado |= 0x02;  // bit 1
+
+    // Sensor 3: HW-488 (activo LOW = detectado)
+    if (HAL_GPIO_ReadPin(HW488_PORT, HW488_PIN) == GPIO_PIN_RESET)
     debug_dist1 = medirDistanciaCm(TRIG1_PORT, TRIG1_PIN, ECHO1_PORT, ECHO1_PIN);
     if (debug_dist1 <= DISTANCIA_UMBRAL_CM)
         estado |= 0x01;  // bit 0
@@ -741,6 +765,8 @@ void mostrar7seg(uint8_t digito) {
     if (digito > 8) digito = 8;
 
     uint8_t seg = ~tabla7seg[digito] & 0x7F;  // invertir los 7 bits
+
+    HAL_GPIO_WritePin(SEG_A_PORT, SEG_A_PIN, (seg & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
     HAL_GPIO_WritePin(SEG_A_PORT, SEG_A_PIN, (seg & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(SEG_B_PORT, SEG_B_PIN, (seg & 0x02) ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -793,6 +819,8 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
     if (hi2c->Instance == I2C1)
     {
+        // Guardar los 4 bits del companero
+        grupoB = i2cRxByte & 0x0F;
         // Guardar los 4 bits del companero + comandos de servo
         grupoB = i2cRxByte & 0x0F;
         servo1_cmd = (i2cRxByte >> 4) & 0x01;

@@ -197,6 +197,11 @@ void Parqueo_SetOcupado(uint8_t espacio, uint8_t estado)
     estado = estado ? 1U : 0U;
     if (ocupado[indice] == estado) return; /* evita parpadeos */
     ocupado[indice] = estado;
+//    NeoPixel_SetEstado(espacio, estado);
+
+    // Cambiar a:
+    if (espacio >= 5U && espacio <= 8U)
+        NeoPixel_SetEstado(espacio - 4U, estado);
     NeoPixel_SetEstado(espacio, estado);
     dibujar_espacio(indice);
     dibujar_contadores();
@@ -337,5 +342,21 @@ void Parqueo_Update(void)
     default:
         animacion = PARADO;
         break;
+    }
+}
+
+
+void Parqueo_ActualizarGrupos(uint8_t grupoA, uint8_t grupoB)
+{
+    grupoA &= 0x0F;
+    grupoB &= 0x0F;
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        // Parqueos 1-4: datos recibidos
+        Parqueo_SetOcupado(i + 1U, (grupoA >> i) & 0x01U);
+
+        // Parqueos 5-8: sensores locales
+        Parqueo_SetOcupado(i + 5U, (grupoB >> i) & 0x01U);
     }
 }

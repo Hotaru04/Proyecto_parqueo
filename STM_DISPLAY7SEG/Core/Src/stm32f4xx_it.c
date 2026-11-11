@@ -57,6 +57,7 @@
 /* External variables --------------------------------------------------------*/
 extern I2C_HandleTypeDef hi2c1;
 /* USER CODE BEGIN EV */
+
 extern DMA_HandleTypeDef hdma_tim4_ch3;
 /* USER CODE END EV */
 
